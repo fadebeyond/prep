@@ -27,6 +27,8 @@ const server = http.createServer((req, res) => {
 // Set up the WebSocket server
 const wss = new WebSocket.Server({ server });
 
+// wss.on(EVENT, FUNCTION);
+
 wss.on("connection", (ws) => {
   console.log("Client connected");
 
@@ -37,6 +39,7 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
+    //TODO: Close the websocket connection?
     console.log("Client disconnected");
   });
 });
@@ -63,9 +66,12 @@ function sendLastTenLines(ws, filePath) {
       const fileSize = stats.size;
       let currentPosition = fileSize; //nitially, this is set to the end of the file (the file size), so we can start reading from the last part of the file and work backwards.
 
+      //100KB -> log.txt
+      //currentPosition = 100KB
+
       const readNextChunk = () => {
-        const start = Math.max(0, currentPosition - chunkSize);
-        const end = currentPosition;
+        const start = Math.max(0, currentPosition - chunkSize); //start = 96KB || 0
+        const end = currentPosition; //end = 100KB || 3KB
 
         if (start === end) {
           // We've reached the start of the file
@@ -81,22 +87,28 @@ function sendLastTenLines(ws, filePath) {
           //attaches an event listener to "data" -> name of the event to listen to.  The "data" event is emitted whenever a chunk of data is available to be read from the stream.
           buffer = chunk.toString() + buffer;
           lines = buffer.trim().split("\n"); // Trim to avoid counting empty line
+          //a\nb\n -> [a, b]
 
           if (lines.length >= 10) {
             // We have enough lines, so stop reading
-            console.log(
-              "Sending last 10 lines to client:",
-              lines.slice(-10).join("\n") //get last 10 elems and unko string me convert kardo with delimeter = \n
-            );
-            ws.send(lines.slice(-10).join("\n"));
-            resolve(fileSize);
+            // console.log(
+            //   "Sending last 10 lines to client:",
+            //   lines.slice(-10).join("\n") //get last 10 elems and unko string me convert kardo with delimeter = \n
+            // );
+            ws.send(lines.slice(-10).join("\n")); //sending value to UI -> 5\n6\n7\n...
+            resolve(fileSize); //100KB
             stream.close(); // Stop the stream
           }
         });
 
         stream.on("end", () => {
           //end is the "event" emitted with there is no more data to be read from the chunk, released by line 77
-          currentPosition = start;
+          //After 1st loop
+          //currentPosition ->100KB
+          //start -> 96KB
+          //end ->100KB
+
+          currentPosition = start; //96KB
 
           if (lines.length < 10) {
             // If we still don't have enough lines, keep reading
@@ -116,7 +128,7 @@ function sendLastTenLines(ws, filePath) {
   });
 }
 
-// Debouncing function to avoid multiple triggers in quick succession
+//Debouncing function to avoid multiple triggers in quick succession
 //Debouncing is a programming technique used to limit the number of times a function gets called. It's particularly useful when you have events that trigger many times in a short period (e.g., window resizing, key presses, or file changes), and you only want to execute the function once after the event has "settled down."
 function debounce(fn, delay) {
   let timeout;
@@ -125,6 +137,7 @@ function debounce(fn, delay) {
     timeout = setTimeout(() => fn(...args), delay);
   };
 }
+// 0s -> f(): f will get called. -> timer = 10s. 9s ->f() ->timer will restart -> 10s
 
 // Helper function to watch the file for changes and send new lines to the client
 function watchForFileChanges(ws, filePath, lastReadPosition) {
@@ -134,8 +147,8 @@ function watchForFileChanges(ws, filePath, lastReadPosition) {
 
       if (stats.size > lastReadPosition) {
         const stream = fs.createReadStream(filePath, {
-          start: lastReadPosition,
-          end: stats.size,
+          start: lastReadPosition, //100KB
+          end: stats.size, //101KB
         });
 
         let newData = "";
@@ -145,8 +158,8 @@ function watchForFileChanges(ws, filePath, lastReadPosition) {
 
         stream.on("end", () => {
           console.log("Sending new data to client:", newData.trim());
-          ws.send(newData.trim());
-          lastReadPosition = stats.size; // Update the position for the next read
+          ws.send(newData.trim()); //sends to the UI
+          lastReadPosition = stats.size; // Update the position for the next read 101KB
         });
 
         stream.on("error", (err) => {
